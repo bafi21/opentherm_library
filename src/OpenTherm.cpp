@@ -16,9 +16,10 @@ OpenTherm::OpenTherm(int inPin, int outPin, bool isSlave):
 	handleInterruptCallback(NULL),
 	processResponseCallback(NULL)
 {
+	timeout = 1000000;
 }
 
-void OpenTherm::begin(void(*handleInterruptCallback)(void), void(*processResponseCallback)(unsigned long, OpenThermResponseStatus))
+void OpenTherm::begin(void(*handleInterruptCallback)(void), void(*processResponseCallback)(unsigned long, OpenThermResponseStatus, void*))
 {
 	pinMode(inPin, INPUT);
 	pinMode(outPin, OUTPUT);
@@ -34,6 +35,16 @@ void OpenTherm::begin(void(*handleInterruptCallback)(void), void(*processRespons
 void OpenTherm::begin(void(*handleInterruptCallback)(void))
 {
 	begin(handleInterruptCallback, NULL);
+}
+
+void OpenTherm::setTimeout(uint32_t timeout)
+{
+	this->timeout = timeout;
+}
+	
+uint32_t OpenTherm::getTimeout()
+{
+	return timeout;
 }
 
 bool ICACHE_RAM_ATTR OpenTherm::isReady()
@@ -67,6 +78,13 @@ void OpenTherm::sendBit(bool high) {
 
 bool OpenTherm::sendRequestAync(unsigned long request)
 {
+	return sendRequestAync(request, nullptr);
+}
+
+bool OpenTherm::sendRequestAync(unsigned long request, void* userData)
+{
+	this->userData=userData;
+
 	//Serial.println("Request: " + String(request, HEX));
 	noInterrupts();
 	const bool ready = isReady();
@@ -115,11 +133,6 @@ bool OpenTherm::sendResponse(unsigned long request)
 	setIdleState();
 	status = OpenThermStatus::READY;
 	return true;
-}
-
-unsigned long OpenTherm::getLastResponse()
-{
-	return response;
 }
 
 OpenThermResponseStatus OpenTherm::getLastResponseStatus()
@@ -184,30 +197,31 @@ void OpenTherm::process()
 	interrupts();
 
 	if (st == OpenThermStatus::READY) return;
+
 	unsigned long newTs = micros();
-	if (st != OpenThermStatus::NOT_INITIALIZED && st != OpenThermStatus::DELAY && (newTs - ts) > 1000000) {
+	if (st != OpenThermStatus::NOT_INITIALIZED && (newTs - ts) > timeout) {
 		status = OpenThermStatus::READY;
 		responseStatus = OpenThermResponseStatus::TIMEOUT;
 		if (processResponseCallback != NULL) {
-			processResponseCallback(response, responseStatus);
+			processResponseCallback(response, responseStatus, userData);
 		}
 	}
 	else if (st == OpenThermStatus::RESPONSE_INVALID) {
 		status = OpenThermStatus::DELAY;
 		responseStatus = OpenThermResponseStatus::INVALID;
 		if (processResponseCallback != NULL) {
-			processResponseCallback(response, responseStatus);
+			processResponseCallback(response, responseStatus, userData);
 		}
 	}
 	else if (st == OpenThermStatus::RESPONSE_READY) {
 		status = OpenThermStatus::DELAY;
 		responseStatus = (isSlave ? isValidRequest(response) : isValidResponse(response)) ? OpenThermResponseStatus::SUCCESS : OpenThermResponseStatus::INVALID;
 		if (processResponseCallback != NULL) {
-			processResponseCallback(response, responseStatus);
+			processResponseCallback(response, responseStatus, userData);
 		}
 	}
 	else if (st == OpenThermStatus::DELAY) {
-		if ((newTs - ts) > 100000) {
+		if ((newTs - ts) > 200000) {
 			status = OpenThermStatus::READY;
 		}
 	}
@@ -278,26 +292,217 @@ void OpenTherm::end() {
 const char *OpenTherm::statusToString(OpenThermResponseStatus status)
 {
 	switch (status) {
-		case NONE:	return "NONE";
-		case SUCCESS: return "SUCCESS";
-		case INVALID: return "INVALID";
-		case TIMEOUT: return "TIMEOUT";
-		default:	  return "UNKNOWN";
+		case NONE:		return "NONE";
+		case SUCCESS: 	return "SUCCESS";
+		case INVALID: 	return "INVALID";
+		case TIMEOUT: 	return "TIMEOUT";
+		default:	  	return "UNKNOWN";
 	}
 }
 
 const char *OpenTherm::messageTypeToString(OpenThermMessageType message_type)
 {
 	switch (message_type) {
-		case READ_DATA:	   return "READ_DATA";
-		case WRITE_DATA:	  return "WRITE_DATA";
-		case INVALID_DATA:	return "INVALID_DATA";
-		case RESERVED:		return "RESERVED";
-		case READ_ACK:		return "READ_ACK";
-		case WRITE_ACK:	   return "WRITE_ACK";
-		case DATA_INVALID:	return "DATA_INVALID";
-		case UNKNOWN_DATA_ID: return "UNKNOWN_DATA_ID";
-		default:			  return "UNKNOWN";
+		case READ_DATA:	   		return "READ_DATA";
+		case WRITE_DATA:		return "WRITE_DATA";
+		case INVALID_DATA:		return "INVALID_DATA";
+		case RESERVED:			return "RESERVED";
+		case READ_ACK:			return "READ_ACK";
+		case WRITE_ACK:	   		return "WRITE_ACK";
+		case DATA_INVALID:		return "DATA_INVALID";
+		case UNKNOWN_DATA_ID:	return "UNKNOWN_DATA_ID";
+		default:			  	return "UNKNOWN";
+	}
+}
+
+const char *OpenTherm::messageIdToString(OpenThermMessageID messageID)
+{
+	switch (messageID)
+	{
+		case OpenThermMessageID::Status: 						return "Status";  
+		case OpenThermMessageID::TSet:   						return "TSet";
+		case OpenThermMessageID::MConfigMMemberIDcode:			return "MConfigMMemberIDcode"; 	//
+		case OpenThermMessageID::SConfigSMemberIDcode:			return "SConfigSMemberIDcode"; //
+		case OpenThermMessageID::Command:						return "Command";//
+		case OpenThermMessageID::ASFflags:			  			return "ASFflags"; 
+		case OpenThermMessageID::RBPflags:			  			return "RBPflags";
+		case OpenThermMessageID::CoolingControl:	  			return "CoolingControl";
+		case OpenThermMessageID::TsetCH2:			  			return "TsetCH2"; 
+		case OpenThermMessageID::TrOverride:			  		return "TrOverride"; 
+		case OpenThermMessageID::TSP:	  						return "TSP"; //
+		case OpenThermMessageID::TSPindexTSPvalue:	  			return "TSPindexTSPvalue"; //
+		case OpenThermMessageID::FHBsize:	  					return "FHBsize"; //
+		case OpenThermMessageID::FHBindexFHBvalue:	  			return "FHBindexFHBvalue"; //
+		case OpenThermMessageID::MaxRelModLevelSetting:	  		return "MaxRelModLevelSetting"; //
+		case OpenThermMessageID::MaxCapacityMinModLevel:		return "MaxCapacityMinModLevel"; //
+		case OpenThermMessageID::TrSet:	  						return "TrSet"; //
+		case OpenThermMessageID::RelModLevel:					return "RelModLevel";
+		case OpenThermMessageID::CHPressure:    				return "CHPressure";
+		case OpenThermMessageID::DHWFlowRate:   				return "DHWFlowRate";
+		case OpenThermMessageID::DayTime:	  					return "DayTime"; //
+		case OpenThermMessageID::Date:	  						return "Date"; //
+		case OpenThermMessageID::Year:	  						return "Year"; //
+		case OpenThermMessageID::TrSetCH2:	  					return "TrSetCH2"; //
+		case OpenThermMessageID::Tr:	  						return "Tr"; //
+		case OpenThermMessageID::Tboiler: 						return "Tboiler";
+		case OpenThermMessageID::Tdhw:							return "Tdhw";
+		case OpenThermMessageID::Toutside:  					return "Toutside";
+		case OpenThermMessageID::Tret:      					return "Tret";
+		case OpenThermMessageID::Tstorage:  					return "Tstorage";
+		case OpenThermMessageID::Tcollector:					return "Tcollector";
+		case OpenThermMessageID::TflowCH2: 			 			return "TflowCH2";
+		case OpenThermMessageID::Tdhw2:     					return "Tdhw2";       
+		case OpenThermMessageID::Texhaust:      				return "Texhaust";
+		case OpenThermMessageID::TdhwSetUBTdhwSetLB:			return "TdhwSetUBTdhwSetLB";
+		case OpenThermMessageID::MaxTSetUBMaxTSetLB:    		return "MaxTSetUBMaxTSetLB";
+		case OpenThermMessageID::HcratioUBHcratioLB:    		return "HcratioUBHcratioLB";
+		case OpenThermMessageID::TdhwSet:			    		return "TdhwSet";
+		case OpenThermMessageID::MaxTSet:			    		return "MaxTSet";
+		case OpenThermMessageID::Hcratio:			    		return "Hcratio";
+		case OpenThermMessageID::OEMDiagnosticCode:     		return "OEMDiagnosticCode";
+		case OpenThermMessageID::BurnerStarts:		    		return "BurnerStarts";
+		case OpenThermMessageID::CHPumpStarts:	        		return "CHPumpStarts";
+		case OpenThermMessageID::DHWPumpValveStarts:    		return "DHWPumpValveStarts";
+		case OpenThermMessageID::DHWBurnerStarts:       		return "DHWBurnerStarts";
+		case OpenThermMessageID::BurnerOperationHours: 			return "BurnerOperationHours";
+		case OpenThermMessageID::CHPumpOperationHours: 	 		return "CHPumpOperationHours";
+		case OpenThermMessageID::DHWPumpValveOperationHours:	return "DHWPumpValveOperationHours";
+		case OpenThermMessageID::DHWBurnerOperationHours: 	    return "DHWBurnerOperationHours";  
+		case OpenThermMessageID::OpenThermVersionMaster: 	    return "OpenThermVersionMaster"; //
+		case OpenThermMessageID::OpenThermVersionSlave: 	    return "OpenThermVersionSlave"; //
+		case OpenThermMessageID::MasterVersion:			 	    return "MasterVersion"; //
+		case OpenThermMessageID::SlaveVersion: 	    			return "SlaveVersion";  // 
+		default:												return "UNKNOWN";
+	}
+}
+
+const char *OpenTherm::messageToString(char *result, unsigned long message)
+{
+	int index = 0;
+	strcpy(result + index, "TYPE=");
+	index += sizeof("TYPE=") - 1;
+	const char * tmp = messageTypeToString(getMessageType(message));	
+	strcpy(result + index, tmp);
+	index += strlen(tmp);
+
+	strcpy(result + index, " ID=");
+	index += sizeof(" ID=") - 1;
+	tmp = messageIdToString(getDataID(message));	
+	strcpy(result + index, tmp);
+	index += strlen(tmp);
+	
+	strcpy(result + index, " DATA=");
+	index += sizeof(" DATA=") - 1; 
+
+	char buf[64];
+	int i = 0;
+	formatMessageData(buf, i, message);
+	strcpy(result + index, buf);
+	index += strlen(buf);
+
+	strcpy(result + index, " MESSAGE=0x");
+	index += sizeof(" MESSAGE=0x") - 1; 
+
+  //result += String(message, HEX);
+	memset(buf, 0x0, sizeof(buf));
+	ultoa(message, buf, HEX);
+	strcpy(result + index, buf);
+	index += strlen(buf);
+	
+  return result;
+}
+
+void OpenTherm::formatMessageData(char *result, int& index, unsigned long message)
+{
+	char buf[16];
+
+	OpenThermMessageID messageId = static_cast<OpenThermMessageID>(getDataID(message));
+
+	if (isValueFloat(messageId))
+		dtostrf(getFloat(message), 2 + 2, 2, buf);
+	else if (isValueBits(messageId)){
+		result[index++] = 'b';
+		utoa(getUInt(message), buf, 2);	
+	}
+	else 
+		switch (messageId){		
+			case OpenThermMessageID::OEMDiagnosticCode:
+			case OpenThermMessageID::BurnerStarts:
+			case OpenThermMessageID::CHPumpStarts:
+			case OpenThermMessageID::DHWPumpValveStarts:
+			case OpenThermMessageID::DHWBurnerStarts:
+			case OpenThermMessageID::BurnerOperationHours:
+			case OpenThermMessageID::CHPumpOperationHours:
+			case OpenThermMessageID::DHWPumpValveOperationHours:
+			case OpenThermMessageID::DHWBurnerOperationHours:
+				sprintf(buf, "%d", getUInt(message));	
+			break;
+			
+			case OpenThermMessageID::TSP: 
+			case OpenThermMessageID::TSPindexTSPvalue: 
+			case OpenThermMessageID::FHBsize: 
+			case OpenThermMessageID::FHBindexFHBvalue: 
+			case OpenThermMessageID::MaxCapacityMinModLevel: 
+			case OpenThermMessageID::TdhwSetUBTdhwSetLB:
+			case OpenThermMessageID::MaxTSetUBMaxTSetLB:
+			case OpenThermMessageID::HcratioUBHcratioLB:
+			//	uint16_t v = getUInt(message);
+			//	sprintf(buf, "%d/%d", v >> 8, v & 0xFF);
+			//break;
+
+			case OpenThermMessageID::Texhaust:
+			default:
+				result[index++] = '0';
+				result[index++] = 'x';
+				utoa(getUInt(message), buf, 16);	
+			break;
+		}
+	
+	strcpy(result + index, buf);
+	index += strlen(buf);
+	return;
+}
+
+bool OpenTherm::isValueFloat(OpenThermMessageID messageId)
+{
+	switch (messageId){
+		case OpenThermMessageID::TSet:
+		case OpenThermMessageID::TsetCH2: 
+		case OpenThermMessageID::MaxRelModLevelSetting: 
+		case OpenThermMessageID::TrSet: 
+		case OpenThermMessageID::RelModLevel:
+		case OpenThermMessageID::CHPressure:
+		case OpenThermMessageID::DHWFlowRate:
+		case OpenThermMessageID::TrSetCH2: 
+		case OpenThermMessageID::Tr: 
+		case OpenThermMessageID::Tboiler:  
+		case OpenThermMessageID::Tdhw: // f8.8  DHW temperature (°C)
+		case OpenThermMessageID::Toutside: // f8.8  Outside temperature (°C)
+		case OpenThermMessageID::Tret: // f8.8  Return water temperature (°C)
+		case OpenThermMessageID::Tstorage: // f8.8  Solar storage temperature (°C)
+		case OpenThermMessageID::Tcollector: // f8.8  Solar collector temperature (°C)
+		case OpenThermMessageID::TflowCH2: // f8.8  Flow water temperature CH2 circuit (°C)
+		case OpenThermMessageID::Tdhw2: // f8.8  Domestic hot water temperature 2 (°C)   
+		case OpenThermMessageID::TdhwSet:
+		case OpenThermMessageID::MaxTSet:
+		case OpenThermMessageID::Hcratio:   
+			return true;
+
+		default:
+			return false;
+	}
+}
+
+bool OpenTherm::isValueBits(OpenThermMessageID messageId)
+{
+	switch (messageId){
+			case OpenThermMessageID::Status:
+			case OpenThermMessageID::ASFflags:
+			case OpenThermMessageID::RBPflags:
+			return true;
+
+		default:
+			return false;
 	}
 }
 

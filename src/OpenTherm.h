@@ -116,24 +116,32 @@ public:
 	OpenTherm(int inPin = 4, int outPin = 5, bool isSlave = false);
 	volatile OpenThermStatus status;
 	void begin(void(*handleInterruptCallback)(void));
-	void begin(void(*handleInterruptCallback)(void), void(*processResponseCallback)(unsigned long, OpenThermResponseStatus));
+	void begin(void(*handleInterruptCallback)(void), void(*processResponseCallback)(unsigned long, OpenThermResponseStatus, void*));
 	bool isReady();
 	unsigned long sendRequest(unsigned long request);
 	bool sendResponse(unsigned long request);
 	bool sendRequestAync(unsigned long request);
+	bool sendRequestAync(unsigned long request, void* userData);
 	unsigned long buildRequest(OpenThermMessageType type, OpenThermMessageID id, unsigned int data);
 	unsigned long buildResponse(OpenThermMessageType type, OpenThermMessageID id, unsigned int data);
-	unsigned long getLastResponse();
 	OpenThermResponseStatus getLastResponseStatus();
 	const char *statusToString(OpenThermResponseStatus status);
 	void handleInterrupt();
 	void process();
 	void end();
+	void setTimeout(uint32_t);
+	uint32_t getTimeout();
 
 	bool parity(unsigned long frame);
 	OpenThermMessageType getMessageType(unsigned long message);
 	OpenThermMessageID getDataID(unsigned long frame);
 	const char *messageTypeToString(OpenThermMessageType message_type);
+	const char *messageIdToString(OpenThermMessageID messageID);
+	const char *messageToString(char *result, unsigned long message);	
+	void formatMessageData(char *result, int& index, unsigned long message);
+	
+	bool isValueFloat(OpenThermMessageID messageId);
+	bool isValueBits(OpenThermMessageID messageId);
 	bool isValidRequest(unsigned long request);
 	bool isValidResponse(unsigned long response);
 
@@ -162,12 +170,13 @@ public:
     float getDHWTemperature();
     float getModulation();
     float getPressure();
-    unsigned char getFault();
+    unsigned char getFault();	
 
 private:
 	const int inPin;
 	const int outPin;
 	const bool isSlave;
+	uint32_t timeout;
 
 	volatile unsigned long response;
 	volatile OpenThermResponseStatus responseStatus;
@@ -181,8 +190,12 @@ private:
 
 	void sendBit(bool high);
 	void(*handleInterruptCallback)();
-	void(*processResponseCallback)(unsigned long, OpenThermResponseStatus);
+	void(*processResponseCallback)(unsigned long, OpenThermResponseStatus, void*);
+
+	void* userData;
 };
+
+static OpenTherm* OpenThermIterface;
 
 #ifndef ICACHE_RAM_ATTR
 #define ICACHE_RAM_ATTR

@@ -124,6 +124,7 @@ public:
 	bool sendRequestAync(unsigned long request, void* userData);
 	unsigned long buildRequest(OpenThermMessageType type, OpenThermMessageID id, unsigned int data);
 	unsigned long buildResponse(OpenThermMessageType type, OpenThermMessageID id, unsigned int data);
+	unsigned long getLastResponse();
 	OpenThermResponseStatus getLastResponseStatus();
 	const char *statusToString(OpenThermResponseStatus status);
 	void handleInterrupt();

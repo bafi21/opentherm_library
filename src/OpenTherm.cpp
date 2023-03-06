@@ -135,6 +135,11 @@ bool OpenTherm::sendResponse(unsigned long request)
 	return true;
 }
 
+unsigned long OpenTherm::getLastResponse()
+{
+	return response;
+}
+
 OpenThermResponseStatus OpenTherm::getLastResponseStatus()
 {
 	return responseStatus;
@@ -199,7 +204,7 @@ void OpenTherm::process()
 	if (st == OpenThermStatus::READY) return;
 
 	unsigned long newTs = micros();
-	if (st != OpenThermStatus::NOT_INITIALIZED && (newTs - ts) > timeout) {
+	if (st != OpenThermStatus::NOT_INITIALIZED && st != OpenThermStatus::DELAY && (newTs - ts) > timeout) {
 		status = OpenThermStatus::READY;
 		responseStatus = OpenThermResponseStatus::TIMEOUT;
 		if (processResponseCallback != NULL) {

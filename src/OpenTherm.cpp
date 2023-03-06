@@ -47,12 +47,12 @@ uint32_t OpenTherm::getTimeout()
 	return timeout;
 }
 
-bool ICACHE_RAM_ATTR OpenTherm::isReady()
+bool IRAM_ATTR OpenTherm::isReady()
 {
 	return status == OpenThermStatus::READY;
 }
 
-int ICACHE_RAM_ATTR OpenTherm::readState() {
+int IRAM_ATTR OpenTherm::readState() {
 	return digitalRead(inPin);
 }
 
@@ -140,7 +140,7 @@ OpenThermResponseStatus OpenTherm::getLastResponseStatus()
 	return responseStatus;
 }
 
-void ICACHE_RAM_ATTR OpenTherm::handleInterrupt()
+void IRAM_ATTR OpenTherm::handleInterrupt()
 {
 	if (isReady())
 	{
@@ -263,7 +263,7 @@ unsigned long OpenTherm::buildRequest(OpenThermMessageType type, OpenThermMessag
 unsigned long OpenTherm::buildResponse(OpenThermMessageType type, OpenThermMessageID id, unsigned int data)
 {
 	unsigned long response = data;
-	response |= type << 28;
+	response |= ((unsigned long)type) << 28;
 	response |= ((unsigned long)id) << 16;
 	if (parity(response)) response |= (1ul << 31);
 	return response;
